@@ -1,0 +1,161 @@
+version: '3.8'
+
+services:
+  # Substation Services (Multiple replicas)
+  substation_1:
+    build: ./substation_service
+    container_name: substation_1
+    ports:
+      - "5001:5000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - smart-grid-network
+
+  substation_2:
+    build: ./substation_service
+    container_name: substation_2
+    ports:
+      - "5002:5000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - smart-grid-network
+
+  substation_3:
+    build: ./substation_service
+    container_name: substation_3
+    ports:
+      - "5003:5000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - smart-grid-network
+
+  # Load Balancer Service
+  load_balancer:
+    build: ./load_balancer
+    container_name: load_balancer
+    ports:
+      - "5004:5001"
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - substation_1
+      - substation_2
+      - substation_3
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - smart-grid-network
+
+  # Charge Request Service
+  charge_request_service:
+    build: ./charge_request_service
+    container_name: charge_request_service
+    ports:
+      - "5005:5002"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOAD_BALANCER_URL=http://load_balancer:5001
+    depends_on:
+      - load_balancer
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - smart-grid-network
+
+  # Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - smart-grid-network
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboard.json:/etc/grafana/provisioning/dashboards/dashboard.json
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - smart-grid-network
+
+  # Load Tester (Optional - for testing)
+  load_tester:
+    build:
+      context: ./load_tester
+      dockerfile: Dockerfile
+    container_name: load_tester
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - charge_request_service
+    networks:
+      - smart-grid-network
+    profiles:
+      - test
+
+volumes:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  smart-grid-network:
+    driver: bridge 

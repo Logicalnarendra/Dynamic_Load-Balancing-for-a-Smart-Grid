@@ -1,0 +1,37 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Substation services
+  - job_name: 'substation_services'
+    static_configs:
+      - targets: 
+        - 'substation_1:5000'
+        - 'substation_2:5000'
+        - 'substation_3:5000'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Load balancer service
+  - job_name: 'load_balancer'
+    static_configs:
+      - targets: ['load_balancer:5001']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Charge request service
+  - job_name: 'charge_request_service'
+    static_configs:
+      - targets: ['charge_request_service:5002']
+    metrics_path: '/metrics'
+    scrape_interval: 10s 
